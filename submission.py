@@ -60,15 +60,20 @@ class ImprovedGreedyMovePlayer(AbstractMovePlayer):
     implement get_move function with greedy move that looks only one step ahead with heuristic.
     (you can add helper functions as you want).
     """
+    w_matrix = []
 
     def __init__(self):
         AbstractMovePlayer.__init__(self)
-        # TODO: add here if needed
+        w_matrix = [[4 ** 15, 4 ** 14, 4 ** 13, 4 ** 12],
+                    [4 ** 8, 4 ** 9, 4 ** 10, 4 ** 11],
+                    [4 ** 7, 4 ** 6, 4 ** 5, 4 ** 4],
+                    [1, 4, 16, 64]]
 
     def get_move(self, board, time_limit) -> Move:
         optional_moves_score = {}
         for move in Move:
-            new_board, done, score = commands[move](board)  # do a run for the board, on trying the "move" direction
+            new_board, done, score = commands[move](
+                self.copy_board(board))  # do a run for the board, on trying the "move" direction
             if done:
                 random.seed()
                 # maximize score, while keep big numbers close to a wall, and prefer steps that increase the number of empty tiles
@@ -77,15 +82,14 @@ class ImprovedGreedyMovePlayer(AbstractMovePlayer):
                 sum_all = max(self.sum_all_tiles(new_board), 1)
                 corn_score = max(self.corner_score(new_board), 1)
                 close_to_wall_scor = max(self.close_to_wall_score(new_board), 1)
-                div_wi = 64
+                div_wi = 16
                 aa, bb, bigges = self.get_biggest_tile_pos(new_board)
-                AMP = math.log2(bigges)
-                hur = empty_tiles / 16 + 1 * corn_score / (div_wi * sum_all) + (close_to_wall_scor / (div_wi * sum_all))
-                # print(f'empty_tiles {empty_tiles} corn_score = {corn_score} close_to_wall_scor = {close_to_wall_scor}  ')
-                optional_moves_score[move] = score + AMP * hur
-                # print(f'score {score} hur = {hur} final = {optional_moves_score[move]}')
-        print(optional_moves_score[max(optional_moves_score,
-                                       key=optional_moves_score.get)])
+                AMP = math.log10(max(3,sum_all))
+
+                optional_moves_score[move] = self.weighted_score(new_board)/(AMP**2) + score +empty_tiles*10 +10*self.aligned(new_board)
+
+                # self.weighted_score(board) # score + AMP * hur self.mont_value(board))
+
         return max(optional_moves_score,
                    key=optional_moves_score.get)  # return comparing to their best value (aka get function)
 
@@ -97,6 +101,15 @@ class ImprovedGreedyMovePlayer(AbstractMovePlayer):
             if value == mini:
                 my_dict.pop(key)
 
+    def weighted_score(self, board) -> float:
+        # matt = [[2, 0.5, 0.5, 2], [0.5, 0.1, 0.1, 0.5],[0.5, 0.1, 0.1, 0.5], [2, 0.5, 0.5, 2]]
+        matt = [[2, 1, 1, 1], [0.5, 0.1, 0.1, 0.5],[0.5, 0.1, 0.1, 0.5], [0.5, 0.5, 0.5, 0.5]]
+        score = 0
+        for i in range(0, len(board)):
+            for j in range(0, len(board)):
+                score += matt[i][j] * board[i][j]
+        return score
+
     def close_to_wall_score(self, board) -> int:
         to_ret = 0
         for i in range(0, len(board)):
@@ -106,6 +119,19 @@ class ImprovedGreedyMovePlayer(AbstractMovePlayer):
             to_ret += board[0][i]
             to_ret += board[-1][i]
         return to_ret
+
+    def aligned(self,board):
+        sum = 0
+        for i in range(0, len(board)):
+            for j in range(0, len(board)-1):
+                if board[i][j] == board[i][j+1]:
+                    sum+=1
+        for j in range(0, len(board)):
+            for i in range(0, len(board)-1):
+                if board[i][j] == board[i+1][j]:
+                    sum+=1
+        return sum
+
 
     def get_closly_score(self,
                          board) -> int:  # return 1 if the biggest number has value = x, and next to it tile with x/2
@@ -139,13 +165,25 @@ class ImprovedGreedyMovePlayer(AbstractMovePlayer):
         to_ret += board[-1][-1]
         to_ret += board[0][-1]
         to_ret += board[0][0]
-        return to_ret
+        return max(board[-1][0],board[-1][-1],board[0][-1],board[0][0])
 
     def get_number_of_empty_tiles(self, board) -> int:
         to_ret = 0
         for i in range(0, len(board)):
             for j in range(0, len(board)):
                 if board[i][j] == 0:
+                    to_ret += 1
+        return to_ret
+
+    def mont_value(self, board) -> int:
+        to_ret = 0
+        for i in range(1, len(board)):
+            for j in range(1, len(board)):
+                if board[i - 1][j] == 2*board[i][j]:
+                    to_ret += 1
+        for i in range(1, len(board)):
+            for j in range(1, len(board)):
+                if board[j][i - 1] == 2*board[j][i]:
                     to_ret += 1
         return to_ret
 
@@ -170,6 +208,13 @@ class ImprovedGreedyMovePlayer(AbstractMovePlayer):
             if board[-1][i] != 0:
                 to_ret += 1
         return to_ret
+
+    def copy_board(self, board):
+        new_board = np.array([[0] * 4] * 4)
+        for i in range(len(board)):
+            for j in range(len(board)):
+                new_board[i][j] = board[i][j]
+        return new_board
 
     def get_biggest_tile_pos(self, board) -> (int, int, int):
         max_val = 0
@@ -258,7 +303,7 @@ class ExpectimaxMovePlayer(AbstractMovePlayer):
         cur_max_value = -1
         cur_depth = 1
         time_limit -= 0.1  # TODO: remove time 0.1
-        while time_limit > (time.time() - start_time):
+        while time_limit > (time.time() - start_time):  # iterate over all depth until timeUP
             cur_depth += 1
             for move in Move:
                 new_board, done, score = commands[move](board)  # do a run for the board, on trying the "move" direction
@@ -307,10 +352,27 @@ class ExpectimaxMovePlayer(AbstractMovePlayer):
             return self.max_value_state(board, time_limit - (time.time() - start_time), depth)
 
     def huristic(self, board) -> float:
-        return self.get_number_of_empty_tiles(board)
+        return self.weighted_score(board)
+        empty_tiles = self.get_number_of_empty_tiles(board)
+        b1, b2, b3, b4 = self.get_4_biggest_tiles(board)
+        b4 = max(b4, 1)
+        corners_score = self.corner_score(board)
+        print(
+            f'empty_tiles = {empty_tiles / 3} b1 = {4 * b1 / (b1 + b2 + b3 + b4)} b2 = {1.5 * b2 / (b1 + b2 + b3 + b4)} b3 = {3 * (b3 / (b1 + b2 + b3 + b4))} b4 = {5 * (b4 / (b1 + b2 + b3 + b4))} cor = {corners_score / (b1 + b2 + b3 + b4)} ')
+        return empty_tiles / 3 + 4 * b1 / (b1 + b2 + b3 + b4) + 1.5 * b2 / (b1 + b2 + b3 + b4) + 3 * (
+                b3 / (b1 + b2 + b3 + b4)) + 5 * (b4 / (b1 + b2 + b3 + b4)) + corners_score / (b1 + b2 + b3 + b4)
+
+    def weighted_score(self, board) -> float:
+        matt = [[1073741824, 268435456, 67108864, 16777216], [65536, 262144, 1048576, 4194304],
+                [16384, 4096, 1024, 256], [1, 4, 16, 64]]
+        score = 0
+        for i in range(0, len(board)):
+            for j in range(0, len(board)):
+                score += matt[i][j] * board[i][j]
+        return score
 
     def get_number_of_empty_tiles(self, board) -> int:
-        return 16-np.count_nonzero(board)
+        return 16 - np.count_nonzero(board)
 
     # return the first empty tile starting from start_i, start_j (including), if none, then returns -1, -1
     def get_next_empty_tile(self, board, start_i, start_j) -> (int, int):
@@ -346,6 +408,26 @@ class ExpectimaxMovePlayer(AbstractMovePlayer):
             board[a][b] = 0
             a, b = self.get_next_empty_tile(board, a + 1, b)
         return states_to_return, probabilities
+
+    def get_4_biggest_tiles(self, board) -> (int, int, int, int):
+        new_B = np.array(self.copy_board(board))
+        sorted_b = np.sort(new_B.flatten())
+        return sorted_b[-1], sorted_b[-2], sorted_b[-3], sorted_b[-4]
+
+    def corner_score(self, board) -> int:
+        to_ret = 0
+        to_ret += board[-1][0]
+        to_ret += board[-1][-1]
+        to_ret += board[0][-1]
+        to_ret += board[0][0]
+        return to_ret
+
+    def copy_board(self, board):
+        new_board = np.zeros((len(board), len(board)))
+        for i in range(len(board)):
+            for j in range(len(board)):
+                new_board[i][j] = board[i][j]
+        return new_board
 
 
 class ExpectimaxIndexPlayer(AbstractIndexPlayer):  # TODO: not sure of the implementation
