@@ -298,7 +298,7 @@ class MiniMaxIndexPlayer(AbstractIndexPlayer):
 
     def __init__(self):
         AbstractIndexPlayer.__init__(self)
-        self.max_agent = ExpectimaxMovePlayer()
+        self.max_agent = MiniMaxMovePlayer()
 
     def get_indices(self, board, value, time_limit) -> (int, int):
         start_time = time.time() - 0.1
@@ -723,10 +723,161 @@ class ContestMovePlayer(AbstractMovePlayer):
 
     def __init__(self):
         AbstractMovePlayer.__init__(self)
-        # TODO: add here if needed
 
     def get_move(self, board, time_limit) -> Move:
-        # TODO: erase the following line and implement this function.
-        raise NotImplementedError
+        time_limit -= 0.1
+        start_time = time.time()
+        optional_moves_score = {}
+        max_move = Move.UP
+        cur_max_value = -1
+        cur_depth = 0
+        while time_limit > (time.time() - start_time):  # iterate over all depth until timeUP
+            cur_depth += 1
+            for move in Move:
+                new_board, done, score = commands[move](board)  # do a run for the board, on trying the "move" direction
+                if done:
+                    optional_moves_score[move] = self.value(new_board, time_limit - (time.time() - start_time),
+                                                            cur_depth, Turn.INDEX_PLAYER_TURN)
+                    if move == Move.DOWN:
+                        optional_moves_score[move] = 0
+                    if move == Move.RIGHT and new_board[0][0] == 0:
+                        optional_moves_score[move] = 1
+                    if cur_max_value < optional_moves_score[move]:
+                        cur_max_value = optional_moves_score[move]
+                        max_move = move
+                    if time_limit <= (time.time() - start_time):
+                        break
 
-    # TODO: add here helper functions in class, if needed
+        return max_move
+
+    def exp_value_state(self, board, time_limit, depth) -> float:
+        start_time = time.time()
+        exp_value = 0
+        next_states, next_states_probability = self.get_next_index_player_states(board)
+        for i in range(0, len(next_states)):
+            exp_value += next_states_probability[i] * self.value(next_states[i],
+                                                                 time_limit - (time.time() - start_time), depth - 1,
+                                                                 Turn.MOVE_PLAYER_TURN)
+        return exp_value
+
+    def max_value_state(self, board, time_limit, depth) -> float:
+        start_time = time.time()
+        max_val = -1
+        for move in Move:
+            new_board, done, score = commands[move](board)
+            if done:
+                max_val = max(max_val, self.value(new_board, time_limit - (time.time() - start_time), depth - 1,
+                                                  Turn.INDEX_PLAYER_TURN))
+        return max_val
+
+    def value(self, board, time_limit, depth, turn) -> float:
+        start_time = time.time()
+        if time_limit <= 0 or depth <= 0:  # must decide now, use huristic
+            return self.huristic(board)
+
+        if turn == Turn.INDEX_PLAYER_TURN:
+            return self.exp_value_state(board, time_limit - (time.time() - start_time), depth)
+
+        else:  # move player turn
+            return self.max_value_state(board, time_limit - (time.time() - start_time), depth)
+
+    def huristic(self, board) -> float:
+
+        empty_tiles = max(self.get_number_of_empty_tiles(board), 1)
+        sum_all = max(self.sum_all_tiles(board), 1)
+        AMP = math.log10(max(3, sum_all))
+
+        weighted_s = self.weighted_score(board) / (AMP ** 2)
+        alighned_vval = math.log10(max(self.aligned(board), 2)) * 10
+        empty_cells = -math.log2(1 / max(empty_tiles, 2))
+
+        hur = weighted_s + empty_cells + alighned_vval
+        if empty_tiles < 3:
+            hur = 0.5 * empty_tiles
+        return hur
+
+    def sum_all_tiles(self, board) -> int:
+        to_ret = 0
+        for i in range(0, len(board)):
+            for j in range(0, len(board)):
+                to_ret += board[i][j]
+        return to_ret
+
+    def weighted_score(self, board) -> float:
+        # matt = [[1073741824, 268435456, 67108864, 16777216], [65536, 262144, 1048576, 4194304],[16384, 4096, 1024, 256], [1, 4, 16, 64]]
+        # matt = [[64*64, 64*16, 64*4, 64], [64*16, 64*4, 64, 16],[64*4, 64, 16, 4], [64,16, 4, 1]]
+        # a,b,c,d = self.get_4_biggest_tiles(board)
+        # matt = [[math.log2(a),  math.log2(max(b,2)),math.log2(max(c,2)),  math.log2(max(d,2))], [0.5, 0.1, 0.1, 0.5], [0.5, 0.1, 0.1, 0.5], [0.1, 0.1, 0.1, 0.1]]
+        matt = [[2 ** 13, 2 ** 10, 2 ** 8, 5], [0.1, 0,0, 2], [0, 0, 0, 0], [0, 0, 0, 0]]
+        # matt = [[2 ** 13, 2 ** 10, 2 ** 8, 5], [0, 0.1, 0.5, 0.6], [0.1, 0, 0, 0], [0, 0, 0, 0]]
+        score = 0
+        for i in range(0, len(board)):
+            for j in range(0, len(board)):
+                score += matt[i][j] * board[i][j]
+        return score
+
+    def get_number_of_empty_tiles(self, board) -> int:
+        return 16 - np.count_nonzero(board)
+
+    # return the first empty tile starting from start_i, start_j (including), if none, then returns -1, -1
+    def get_next_empty_tile(self, board, start_i, start_j) -> (int, int):
+        if start_i >= len(board):
+            start_i = 0
+            start_j += 1
+        if start_j >= len(board):
+            return -1, -1
+
+        for i in range(start_i, len(board)):
+            if board[i][start_j] == 0:
+                return i, start_j
+
+        for i in range(0, len(board)):
+            for j in range(start_j + 1, len(board)):
+                if board[i][j] == 0:
+                    return i, j
+        return -1, -1
+
+    def aligned(self, board):
+        sum = 0
+        for i in range(0, len(board)):
+            for j in range(0, len(board) - 1):
+                if board[i][j] == board[i][j + 1]:
+                    sum += 1
+        for j in range(0, len(board)):
+            for i in range(0, len(board) - 1):
+                if board[i][j] == board[i + 1][j]:
+                    sum += 1
+        return sum
+
+    # return all expected next states of the index player, with thier probabilities
+    def get_next_index_player_states(self, board, value=None) -> ([], []):
+        empty_tiles_count = self.get_number_of_empty_tiles(board)
+        probabilities = []
+        states_to_return = []
+        a, b = self.get_next_empty_tile(board, 0, 0)
+        if value is None:
+            while a != -1:
+                board[a][b] = 2
+                states_to_return.append(self.copy_board(board))
+                probabilities.append((1 - PROBABILITY) / empty_tiles_count)
+                board[a][b] = 4
+                states_to_return.append(self.copy_board(board))
+                probabilities.append(PROBABILITY / empty_tiles_count)
+                board[a][b] = 0
+                a, b = self.get_next_empty_tile(board, a + 1, b)
+        else:
+            while a != -1:
+                board[a][b] = value
+                states_to_return.append(self.copy_board(board))
+                probabilities.append(0)  # irrelevant
+                board[a][b] = 0
+                a, b = self.get_next_empty_tile(board, a + 1, b)
+
+        return states_to_return, probabilities
+
+    def copy_board(self, board):
+        new_board = np.zeros((len(board), len(board)))
+        for i in range(len(board)):
+            for j in range(len(board)):
+                new_board[i][j] = board[i][j]
+        return new_board
