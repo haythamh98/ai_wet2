@@ -317,7 +317,16 @@ class MiniMaxIndexPlayer(AbstractIndexPlayer):
                 if time_limit <= (time.time() - start_time):
                     break
         # time UP
-        return self.find_diff_indices(board, min_board)
+        try:
+            return self.find_diff_indices(board, min_board)
+        except:
+            return self.first_empty_tile(board)
+
+    def first_empty_tile(self, board):
+        for i in range(0, len(board)):
+            for j in range(0, len(board)):
+                if board[i][j] == 0:
+                    return i, j
 
     def find_diff_indices(self, board, min_board):
         for i in range(0, len(board)):
@@ -390,15 +399,15 @@ class ABMovePlayer(AbstractMovePlayer):
 
         elif agent == 0:
             curr_min = float('inf')
-            states, _ = self.get_next_index_player_states(self.copy_board(board),value=2)
+            states, _ = self.get_next_index_player_states(self.copy_board(board), value=2)
             for state in states:
                 v = self.ABsearch(self.copy_board(state), time_limit, start_time, 1, depth - 1, alpha, beta)
-                #if v is None:
+                # if v is None:
                 #    v = self.ABsearch(state, time_limit, start_time, 1, depth - 1, alpha, beta)
                 curr_min = min(v, curr_min)
                 beta = min(curr_min, beta)
                 if curr_min <= alpha:
-                    #print('prune')
+                    # print('prune')
                     return self.huristic(board)
                 if time.time() - start_time >= time_limit:
                     break
@@ -808,7 +817,7 @@ class ContestMovePlayer(AbstractMovePlayer):
         # matt = [[64*64, 64*16, 64*4, 64], [64*16, 64*4, 64, 16],[64*4, 64, 16, 4], [64,16, 4, 1]]
         # a,b,c,d = self.get_4_biggest_tiles(board)
         # matt = [[math.log2(a),  math.log2(max(b,2)),math.log2(max(c,2)),  math.log2(max(d,2))], [0.5, 0.1, 0.1, 0.5], [0.5, 0.1, 0.1, 0.5], [0.1, 0.1, 0.1, 0.1]]
-        matt = [[2 ** 13, 2 ** 10, 2 ** 8, 5], [0.1, 0,0, 2], [0, 0, 0, 0], [0, 0, 0, 0]]
+        matt = [[2 ** 13, 2 ** 10, 2 ** 8, 5], [0.1, 0, 0, 2], [0, 0, 0, 0], [0, 0, 0, 0]]
         # matt = [[2 ** 13, 2 ** 10, 2 ** 8, 5], [0, 0.1, 0.5, 0.6], [0.1, 0, 0, 0], [0, 0, 0, 0]]
         score = 0
         for i in range(0, len(board)):
